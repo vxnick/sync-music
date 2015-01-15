@@ -1,0 +1,126 @@
+#!/usr/bin/env python
+import os
+import sys
+import shutil
+import argparse
+import tempfile
+
+# Change to your Music directory
+music_dir = "/home/nick/Music"
+
+# Change to the output directory
+output_dir = "/home/nick/.cache/sync-music"
+
+# Basic text formatting
+TEXT_BOLD = '\033[1m'
+TEXT_RESET = '\033[0m'
+
+os.makedirs(output_dir, exist_ok=True)
+tracks = []
+
+parser = argparse.ArgumentParser(description="sync playlist music tracks")
+parser.add_argument("-n", "--dry-run",
+                    help="run without making any changes",
+                    action="store_true")
+parser.add_argument("-v", "--verbose", help="show more output",
+                    action="store_true")
+args = parser.parse_args()
+
+# Create a _Playlists directory
+# The underscore prefix is used to show it at the top of directory listings.
+playlist_dir = output_dir + "/" + "_Playlists"
+os.makedirs(playlist_dir, exist_ok=True)
+
+print(TEXT_BOLD + "scanning playlists" + TEXT_RESET)
+
+playlists = os.listdir(playlist_dir)
+
+if len(playlists) == 0:
+    print("no playlists found")
+    sys.exit(1)
+
+for playlist in playlists:
+    if not playlist.endswith(".m3u"):
+        print(playlist + " must be .m3u format")
+        continue
+
+    tmp_playlist = tempfile.NamedTemporaryFile(delete=False)
+    new_playlist = tmp_playlist.name
+
+    with open(playlist_dir + "/" + playlist) as old_playlist, open(tmp_playlist.name, "w") as new_playlist:
+        for line in old_playlist:
+            # Remove the original music directory path prefix, so that files are
+            # relative to the output directory.
+            if line.startswith(music_dir + "/"):
+                line = line.replace(music_dir + "/", "", 1)
+
+            # Add to track list if the line is a track path
+            if not line.startswith("#EXT"):
+                tracks.append(line.strip())
+
+            new_playlist.write(line)
+
+    # Overwrite the original playlist with the new one
+    shutil.move(tmp_playlist.name, playlist_dir + "/" + playlist)
+
+if len(tracks) == 0:
+    print("no tracks to sync")
+    sys.exit(1)
+
+print(TEXT_BOLD + "removing unwanted tracks and directories" + TEXT_RESET)
+
+for (root, dirs, files) in os.walk(output_dir, topdown=False):
+    for track in files:
+        track_file = root.replace(output_dir + "/", "", 1) + "/" + track
+
+        if track_file.startswith("_Playlists") or track_file.startswith(".sync"):
+            continue
+
+        if track_file not in tracks:
+            if not args.dry_run:
+                os.remove(output_dir + "/" + track_file)
+            print("removed " + track_file)
+
+    for tmp_dir in dirs:
+        track_dir = (root.replace(output_dir, "", 1) + "/" + tmp_dir).lstrip("/")
+        dir_path = output_dir + "/" + track_dir
+
+        if track_dir == "_Playlists" or track_dir.startswith(".sync"):
+            continue
+
+        # Delete empty directories
+        if len(os.listdir(dir_path)) == 0:
+            if not args.dry_run:
+                os.rmdir(dir_path)
+            if args.verbose:
+                print("removing empty directory " + track_dir)
+
+print(TEXT_BOLD + "syncing tracks" + TEXT_RESET)
+count = 1
+total = len(tracks)
+tracks = sorted(set(tracks))
+
+# Sync wanted tracks
+for track in tracks:
+    source_file = music_dir + "/" + track
+    target_dir = output_dir + "/" + os.path.dirname(track)
+    target_file = target_dir + "/" + os.path.basename(track)
+
+    if not args.dry_run:
+        os.makedirs(target_dir, exist_ok=True)
+
+    if os.path.exists(target_file) and \
+            os.path.getmtime(source_file) <= os.path.getmtime(target_file):
+        if args.verbose:
+            print("[%d/%d] skipping %s" % (count, total, track))
+        count += 1
+        continue
+    try:
+        if not args.dry_run:
+            os.link(source_file, target_file)
+        print("[%d/%d] synced %s" % (count, total, track))
+    except os.error:
+        if not args.dry_run:
+            shutil.copy2(source_file, target_file)
+        print("[%d/%d] synced %s" % (count, total, track))
+    count += 1
