@@ -2,6 +2,7 @@
 import os
 import sys
 import shutil
+import fnmatch
 import argparse
 import tempfile
 
@@ -10,6 +11,12 @@ music_dir = "/home/nick/Music"
 
 # Change to the output directory
 output_dir = "/home/nick/.cache/sync-music"
+
+ignore = [
+    "_Playlists/*",
+    ".stfolder",
+    ".sync/*",
+]
 
 # Basic text formatting
 TEXT_BOLD = '\033[1m'
@@ -71,9 +78,16 @@ print(TEXT_BOLD + "removing unwanted tracks and directories" + TEXT_RESET)
 
 for (root, dirs, files) in os.walk(output_dir, topdown=False):
     for track in files:
-        track_file = root.replace(output_dir + "/", "", 1) + "/" + track
+        skip = False
+        track_file = (root.replace(output_dir, "", 1) + "/" + track).lstrip("/")
 
-        if track_file.startswith("_Playlists") or track_file.startswith(".sync"):
+        for pattern in ignore:
+            if fnmatch.fnmatch(track_file, pattern):
+                if args.verbose:
+                    print("skipping ignored file " + track_file)
+                skip = True
+
+        if skip:
             continue
 
         if track_file not in tracks:
@@ -82,10 +96,17 @@ for (root, dirs, files) in os.walk(output_dir, topdown=False):
             print("removed " + track_file)
 
     for tmp_dir in dirs:
+        skip = False
         track_dir = (root.replace(output_dir, "", 1) + "/" + tmp_dir).lstrip("/")
         dir_path = output_dir + "/" + track_dir
 
-        if track_dir == "_Playlists" or track_dir.startswith(".sync"):
+        for pattern in ignore:
+            if fnmatch.fnmatch(track_dir, pattern):
+                if args.verbose:
+                    print("skipping ignored directory " + track_dir)
+                skip = True
+
+        if skip:
             continue
 
         # Delete empty directories
