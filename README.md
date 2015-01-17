@@ -5,12 +5,11 @@ This utility has been created to make synchronising music from a machine to
 mobile devices easier.
 
 To replicate my setup, you will need to install
-[BitTorrent Sync](http://www.getsync.com/) or similiar, and have it monitor
+[Syncthing](http://syncthing.net/) or similiar, and have it monitor
 the `output_dir` specified in the script.
 
-You will then need to install BTSync on your mobile device and point it at your
-desired directory. I also enable _Auto Sync_ within the
-client and create the share as read-only.
+You will then need to install Syncthing on your mobile device and point it at your
+desired directory. I ensure that only my machine is set as the _Folder Master_.
 
 ## Notes
 
